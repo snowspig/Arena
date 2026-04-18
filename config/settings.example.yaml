@@ -1,0 +1,101 @@
+# QMT 交易系统配置 — 示例模板
+# 复制为 settings.yaml 并填入实际值后使用
+
+accounts:
+  simulation:
+    enabled: true
+    qmt_path: "D:\\QMTSIM\\userdata_mini"   # QMT 客户端安装路径
+    account_id: "YOUR_SIM_ACCOUNT_ID"        # 模拟账户号
+    account_type: "STOCK"
+    simulation_mode: true
+    session_id: 2
+    proxy_port: 8011
+    auto_reverse_repo_enabled: true
+    reverse_repo_min_amount: 1000
+
+  live:
+    enabled: false
+    qmt_path: "D:\\QMTSP\\userdata_mini"    # 实盘 QMT 客户端路径
+    account_id: "YOUR_LIVE_ACCOUNT_ID"       # 实盘账户号
+    account_type: "STOCK"
+    simulation_mode: false
+    session_id: 2
+    proxy_port: 8012
+    auto_reverse_repo_enabled: true
+    reverse_repo_min_amount: 1000
+
+signal_source:
+  mode: "arena"                                      # arena / remote / mock
+  remote_url: "http://YOUR_SIGNAL_SERVER:18790/api/signals"
+  poll_interval_seconds: 30
+
+arena:
+  enabled: true
+  execution_provider: "vllm_trader_pro"               # 默认执行 provider
+
+  providers:
+    # 本地 vLLM 示例
+    vllm_trader_pro:
+      type: "vllm"                                    # vllm / nadirclaw / anthropic
+      base_url: "http://localhost:8000/v1"
+      model: "YOUR_VLLM_MODEL"
+      api_key: "none"
+      enabled: true
+      capital_pool: 5_000_000
+      timeout: 900
+
+    # NadirClaw 代理示例 (OpenAI-compatible)
+    nadirclaw_example:
+      type: "nadirclaw"
+      base_url: "http://localhost:8856/v1"
+      model: "YOUR_MODEL_NAME"
+      api_key: "local"
+      enabled: true
+      capital_pool: 5_000_000
+      timeout: 300
+
+    # Anthropic-compatible API 示例
+    anthropic_example:
+      type: "anthropic"
+      base_url: "https://api.anthropic-compatible-provider.com"
+      model: "YOUR_MODEL_NAME"
+      api_key: "YOUR_API_KEY"
+      enabled: true
+      capital_pool: 5_000_000
+      timeout: 300
+
+trading:
+  strategy_name: "qlibrd"
+  default_price_type: "MARKET_SH_CONVERT_5_CANCEL"
+  buy_time: "open_auction"
+  sell_time: "close"
+  close_minutes_before: 5
+  vwap_interval_minutes: 5
+
+schedule:
+  pre_open: "09:15"
+  open_auction_start: "09:25"
+  open_auction_end: "09:26"
+  morning_open: "09:30"
+  morning_close: "11:30"
+  afternoon_open: "13:00"
+  afternoon_close: "15:00"
+  close_sell_time: "14:55"
+
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  rotation: "1 day"
+  retention: "30 days"
+
+backtest:
+  enabled: false
+  history_signal_file: "data/history_signals.csv"
+  start_date: "2025-01-01"
+  end_date: "2025-12-31"
+
+mongodb:
+  uri: "mongodb://YOUR_MONGODB_HOST:27017"
+  database: "qlibrd_qmt"
+  qlibrd_db: "qlibrd"
+  settlement_collection: "settlements"

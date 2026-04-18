@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compare</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/static/nav.css">
+  <style>
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 8px; color: var(--text); }
+    .subtitle { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 24px; }
+    .controls { display: flex; gap: 12px; margin-bottom: 24px; align-items: center; }
+    .controls input { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 0.9rem; color: var(--text); background: var(--bg); }
+    .controls input:focus { outline: none; border-color: var(--primary); }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .card-title { font-size: 1rem; font-weight: 600; margin: 0; color: var(--text); }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
+    .tag-list li { background: var(--primary-dim); color: var(--primary); padding: 6px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; border: 1px solid rgba(212,164,88,0.2); }
+    .provider-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .provider-row:last-child { border-bottom: none; }
+    .provider-name { font-weight: 600; min-width: 200px; color: var(--primary); }
+    .provider-stat { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+    .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+    .stat-value { font-size: 1rem; font-weight: 600; color: var(--text); }
+    .top5-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .top5-tags span { background: var(--card-bg-alt); color: var(--text-muted); padding: 3px 10px; border-radius: 4px; font-size: 0.8rem; border: 1px solid var(--border); }
+    .empty-state { padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+    .chart-wrap { height: 280px; position: relative; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account=simulation">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare" class="active">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <main>
+    <h1 id="title">Overlap Analysis</h1>
+    <p class="subtitle" id="subtitle">对比各 Agent 的选股重叠度和信心差异</p>
+    <div class="controls">
+      <span style="color:var(--text-muted);font-size:0.85rem">日期:</span>
+      <input type="date" id="dateInput" onchange="loadData()">
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">全体共识股票</h2><span class="empty-state" id="commonCount"></span></div>
+      <ul class="tag-list" id="common"></ul>
+    </div>
+    <div class="card" style="padding:20px">
+      <div class="card-header"><h2 class="card-title">信心差异 Top 股票</h2></div>
+      <div class="chart-wrap"><canvas id="divergeChart"></canvas></div>
+      <div id="divergeList"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Per Provider Stats</h2></div>
+      <div id="providers"></div>
+    </div>
+  </main>
+  <script>
+    function lastTradingDate() {
+      const d = new Date();
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    const localDate = lastTradingDate();
+    document.getElementById('dateInput').value = localDate;
+    let chartInstance = null;
+
+    function loadData() {
+      const tradeDate = document.getElementById('dateInput').value || localDate;
+      document.getElementById('title').textContent = `Overlap Analysis: ${tradeDate}`;
+      fetch(`/api/arena/comparison/${tradeDate}`).then(r => r.json()).then(data => {
+        const common = data.overlap?.common_all || [];
+        document.getElementById('commonCount').textContent = `${common.length} 只`;
+        document.getElementById('common').innerHTML = common.length ? common.map(c => `<li>${c}</li>`).join('') : '<div class="empty-state">无共识股票</div>';
+        document.getElementById('providers').innerHTML = Object.entries(data.per_provider || {}).map(([name, stat]) => `
+          <div class="provider-row">
+            <div class="provider-name">${name}</div>
+            <div class="provider-stat"><div class="stat-label">Picks</div><div class="stat-value">${stat.pick_count}</div></div>
+            <div class="provider-stat"><div class="stat-label">Avg Conf</div><div class="stat-value">${(stat.avg_confidence||0).toFixed(3)}</div></div>
+            <div class="provider-stat"><div class="stat-label">Max Conf</div><div class="stat-value">${(stat.max_confidence||0).toFixed(3)}</div></div>
+            <div class="top5-tags">${(stat.top5||[]).map(c => `<span>${c}</span>`).join('')}</div>
+          </div>`).join('') || '<div class="empty-state">无数据</div>';
+
+        // Divergence chart
+        const divItems = (data.divergence?.top_divergent || []).slice(0, 10);
+        if (chartInstance) chartInstance.destroy();
+        const canvas = document.getElementById('divergeChart');
+        if (divItems.length > 0) {
+          chartInstance = new Chart(canvas, {
+            type: 'bar',
+            data: {
+              labels: divItems.map(d => d.stock_code),
+              datasets: [{ label: '信心差', data: divItems.map(d => d.spread), backgroundColor: 'rgba(212,164,88,0.4)', borderColor: '#d4a458', borderWidth: 1, borderRadius: 4 }]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: { x: { grid: { display: false }, ticks: { color: '#a3afb8' } }, y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#a3afb8' } } }
+            }
+          });
+          document.getElementById('divergeList').innerHTML = divItems.map(d => `<div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85rem"><span style="color:var(--primary);font-weight:500;min-width:100px">${d.stock_code}</span><span style="color:var(--text-muted)">spread: ${d.spread}</span></div>`).join('');
+        } else {
+          document.getElementById('divergeList').innerHTML = '<div class="empty-state">暂无差异分析数据</div>';
+        }
+      });
+    }
+    loadData();
+  </script>
+</body>
+</html>

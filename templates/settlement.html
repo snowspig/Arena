@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ settlement.date }} 结算详情</title>
+  <link rel="stylesheet" href="/static/nav.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account={{ account }}" class="active">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-header">
+      <div class="page-title">
+        <h1>{{ settlement.date }} 结算详情</h1>
+        <p>账户类型：{{ account }}</p>
+      </div>
+      <div>
+        <a class="link-btn" href="/dashboard?account={{ account }}">返回仪表盘</a>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">总资产</div>
+        <div class="card-value">{{ settlement.asset.total_asset | round(2) }}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">可用资金</div>
+        <div class="card-value">{{ settlement.asset.cash | round(2) }}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">持仓市值</div>
+        <div class="card-value">{{ settlement.asset.market_value | round(2) }}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">今日盈亏</div>
+        <div class="card-value {% if settlement.daily_pnl >= 0 %}positive{% else %}negative{% endif %}">
+          {{ "%+.2f" | format(settlement.daily_pnl) }}
+        </div>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-header">
+        <h2 class="section-title">持仓明细</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>证券代码</th>
+              <th>持仓数量</th>
+              <th>可用数量</th>
+              <th>成本价</th>
+              <th>市值</th>
+              <th>浮动盈亏</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in settlement.positions %}
+            <tr>
+              <td>{{ item.stock_code }}</td>
+              <td>{{ item.volume }}</td>
+              <td>{{ item.can_use_volume }}</td>
+              <td>{{ "%.3f" | format(item.cost_price) }}</td>
+              <td>{{ "%.2f" | format(item.market_value) }}</td>
+              <td class="{% if item.unrealized_pnl >= 0 %}positive{% else %}negative{% endif %}">{{ "%+.2f" | format(item.unrealized_pnl) }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="muted">暂无持仓</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-header">
+        <h2 class="section-title">委托明细</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>委托号</th>
+              <th>证券代码</th>
+              <th>方向</th>
+              <th>委托数量</th>
+              <th>成交数量</th>
+              <th>成交均价</th>
+              <th>报价类型</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in settlement.orders %}
+            <tr>
+              <td>{{ item.order_id }}</td>
+              <td>{{ item.stock_code }}</td>
+              <td>{{ item.direction }}</td>
+              <td>{{ item.order_volume }}</td>
+              <td>{{ item.traded_volume }}</td>
+              <td>{{ "%.3f" | format(item.traded_price) }}</td>
+              <td>{{ item.price_type }}</td>
+              <td>{{ item.order_status }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="8" class="muted">暂无委托</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-header">
+        <h2 class="section-title">成交明细</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>成交号</th>
+              <th>证券代码</th>
+              <th>方向</th>
+              <th>成交数量</th>
+              <th>成交价格</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in settlement.trades %}
+            <tr>
+              <td>{{ item.trade_id }}</td>
+              <td>{{ item.stock_code }}</td>
+              <td>{{ item.direction }}</td>
+              <td>{{ item.traded_volume }}</td>
+              <td>{{ "%.3f" | format(item.traded_price) }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" class="muted">暂无成交</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-header">
+        <h2 class="section-title">原始 JSON</h2>
+        <button class="json-toggle" type="button" onclick="document.getElementById('jsonView').classList.toggle('open')">显示 / 隐藏</button>
+      </div>
+      <div id="jsonView" class="json-view open">
+        <pre>{{ raw_json }}</pre>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

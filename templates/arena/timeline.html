@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timeline</title>
+  <link rel="stylesheet" href="/static/nav.css">
+  <style>
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 8px; color: var(--text); }
+    .subtitle { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 24px; }
+    .controls { display: flex; gap: 12px; margin-bottom: 24px; align-items: center; }
+    .controls input { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 0.9rem; color: var(--text); background: var(--bg); }
+    .controls input:focus { outline: none; border-color: var(--primary); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); transition: border-color 0.2s; }
+    .card:hover { border-color: var(--border-hover); }
+    .card-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px; }
+    .card-value { font-size: 1.75rem; font-weight: 700; color: var(--text); }
+    .section-card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; }
+    .section-title { font-size: 1rem; font-weight: 600; margin: 0 0 16px; color: var(--text); }
+    .timeline-list { list-style: none; padding: 0; margin: 0; }
+    .timeline-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+    .timeline-item:last-child { border-bottom: none; }
+    .timeline-time { color: var(--primary); font-weight: 600; min-width: 60px; font-size: 0.8rem; }
+    .timeline-text { color: var(--text-muted); }
+    .empty-state { padding: 48px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account=simulation">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline" class="active">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <main>
+    <h1 id="title">Timeline</h1>
+    <p class="subtitle">Arena 每日执行时间线：信号生成、交易、结算、复盘</p>
+    <div class="controls">
+      <span style="color:var(--text-muted);font-size:0.85rem">日期:</span>
+      <input type="date" id="dateInput" onchange="loadData()">
+    </div>
+    <div class="grid" id="summary"></div>
+    <div class="section-card" id="eventsCard" style="display:none">
+      <h2 class="section-title">事件时间线</h2>
+      <ul class="timeline-list" id="events"></ul>
+    </div>
+  </main>
+  <script>
+    function lastTradingDate() {
+      const d = new Date();
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    const localDate = lastTradingDate();
+    document.getElementById('dateInput').value = localDate;
+
+    function loadData() {
+      const tradeDate = document.getElementById('dateInput').value || localDate;
+      document.getElementById('title').textContent = `Timeline: ${tradeDate}`;
+      fetch(`/api/arena/timeline/${tradeDate}`).then(r => r.json()).then(data => {
+        const signals = data.signals || [];
+        const trades = data.trades || [];
+        const snapshots = data.snapshots || [];
+        const reviews = data.reviews || [];
+
+        document.getElementById('summary').innerHTML = `
+          <div class="card"><div class="card-label">Signals</div><div class="card-value">${signals.length}</div></div>
+          <div class="card"><div class="card-label">Trades</div><div class="card-value">${trades.length}</div></div>
+          <div class="card"><div class="card-label">Snapshots</div><div class="card-value">${snapshots.length}</div></div>
+          <div class="card"><div class="card-label">Reviews</div><div class="card-value">${reviews.length}</div></div>
+        `;
+
+        // Build timeline from signals + trades + reviews
+        const events = [];
+        signals.forEach(s => events.push({ time: '08:00', text: `${s.provider}: 生成 ${s.signal_count || 0} 条信号` }));
+        trades.forEach(t => events.push({ time: t.trade_time || '09:15', text: `${t.provider}: ${t.stock_code} ${t.direction} ${t.volume || 0}股 @ ${(t.price||0).toFixed(2)}` }));
+        reviews.forEach(r => events.push({ time: '16:00', text: `${r.provider}: 命中率 ${((r.hit_rate||0)*100).toFixed(0)}%, 超额 ${r.excess_return || 0}%` }));
+
+        const card = document.getElementById('eventsCard');
+        if (events.length > 0) {
+          card.style.display = 'block';
+          events.sort((a, b) => a.time.localeCompare(b.time));
+          document.getElementById('events').innerHTML = events.map(e =>
+            `<li class="timeline-item"><span class="timeline-time">${e.time}</span><span class="timeline-text">${e.text}</span></li>`
+          ).join('');
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+    loadData();
+  </script>
+</body>
+</html>

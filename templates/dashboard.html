@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>账户仪表盘</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/nav.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <span class="banner-section-label">账户</span>
+      <a class="active" href="/dashboard?account={{ account }}">仪表盘</a>
+      {% if live_enabled %}
+      <a href="/dashboard?account=live">实盘</a>
+      {% endif %}
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-header">
+      <div class="page-title">
+        <h1>账户仪表盘</h1>
+        <p>查看实时资产、持仓与历史结算。</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="tabs">
+          <a class="tab-link {% if account == 'simulation' %}active{% endif %}" href="/dashboard?account=simulation">模拟盘</a>
+          {% if live_enabled %}
+          <a class="tab-link {% if account == 'live' %}active{% endif %}" href="/dashboard?account=live">实盘</a>
+          {% endif %}
+        </div>
+        <button class="settings-btn" onclick="openSettingsModal()" title="账户设置">⚙</button>
+      </div>
+    </div>
+
+    {% if not realtime.enabled %}
+    <div class="warning-banner">{{ '实盘' if account == 'live' else '模拟盘' }}账户未启用，请在设置中开启</div>
+    {% elif realtime.snapshot_mode %}
+    <div class="info-banner">
+      当前展示 {{ realtime.snapshot_date or '最近一次' }} 结算快照，不占用 QMT 会话。
+      <button id="refreshRealtimeBtn" style="margin-left:12px;padding:2px 12px;font-size:0.8rem;background:var(--primary);color:#070b10;border:none;border-radius:4px;cursor:pointer">手动刷新实时数据</button>
+    </div>
+    {% elif not realtime.connected %}
+    <div class="info-banner">实时数据未连接，请启动 QMT 代理: python main.py proxy --account {{ account }}</div>
+    {% endif %}
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">总资产</div>
+        <div class="card-value {% if not realtime.connected and not realtime.snapshot_mode %}muted{% endif %}">{{ "%.2f" | format(realtime.asset.total_asset) if (realtime.connected or realtime.snapshot_mode) else '--' }}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">可用资金</div>
+        <div class="card-value {% if not realtime.connected and not realtime.snapshot_mode %}muted{% endif %}">{{ "%.2f" | format(realtime.asset.cash) if (realtime.connected or realtime.snapshot_mode) else '--' }}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">持仓市值</div>
+        <div class="card-value {% if not realtime.connected and not realtime.snapshot_mode %}muted{% endif %}">{{ "%.2f" | format(realtime.asset.market_value) if (realtime.connected or realtime.snapshot_mode) else '--' }}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">今日盈亏</div>
+        <div class="card-value {% if realtime.daily_pnl >= 0 %}positive{% else %}negative{% endif %} {% if not realtime.connected and not realtime.snapshot_mode %}muted{% endif %}">
+          {{ "%+.2f" | format(realtime.daily_pnl) if (realtime.connected or realtime.snapshot_mode) else '--' }}
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <div class="section-header">
+        <h2 class="section-title">资产曲线</h2>
+        <div class="range-btns">
+          <button class="range-btn active" data-days="7">近7天</button>
+          <button class="range-btn" data-days="30">近30天</button>
+          <button class="range-btn" data-days="0">全部</button>
+        </div>
+      </div>
+      <div style="height:280px;position:relative"><canvas id="assetChart"></canvas></div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-header">
+        <h2 class="section-title">当前持仓</h2>
+        <span class="muted">共 {{ realtime.positions | length }} 条</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>证券代码</th>
+              <th>持仓数量</th>
+              <th>可用数量</th>
+              <th>成本价</th>
+              <th>市值</th>
+              <th>浮动盈亏</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in realtime.positions %}
+            <tr>
+              <td>{{ item.stock_code }}</td>
+              <td>{{ item.volume }}</td>
+              <td>{{ item.can_use_volume }}</td>
+              <td>{{ "%.3f" | format(item.cost_price) }}</td>
+              <td>{{ "%.2f" | format(item.market_value) }}</td>
+              <td class="{% if item.unrealized_pnl >= 0 %}positive{% else %}negative{% endif %}">{{ "%+.2f" | format(item.unrealized_pnl) }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="muted">暂无持仓数据</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-box" id="signalSection">
+      <div class="section-header">
+        <h2 class="section-title">信号对比</h2>
+        <span class="muted">计划 vs 执行</span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button onclick="regenerateSignals()" id="regenerateBtn" style="padding:2px 10px;font-size:0.8rem;background:var(--primary);color:#070b10;border:none;border-radius:4px;cursor:pointer">获取信号</button>
+          <button onclick="clearSignals('buy')" style="padding:2px 10px;font-size:0.8rem;background:var(--danger);color:#fff;border:none;border-radius:4px;cursor:pointer">清除买入</button>
+          <button onclick="clearSignals('sell')" style="padding:2px 10px;font-size:0.8rem;background:var(--warning);color:#070b10;border:none;border-radius:4px;cursor:pointer">清除卖出</button>
+          <button onclick="clearSignals('all')" style="padding:2px 10px;font-size:0.8rem;background:var(--card-bg-alt);color:var(--text-muted);border:1px solid var(--border);border-radius:4px;cursor:pointer">清空队列</button>
+        </div>
+      </div>
+      <div class="signal-compare">
+        <div class="signal-col">
+          <h3 style="margin-bottom:8px;font-size:0.95rem" id="tomorrowBuyLabel">明日计划买入</h3>
+          <table class="table signal-table">
+            <thead><tr><th>股票</th><th>数量</th><th>时机</th></tr></thead>
+            <tbody id="buySignals"><tr><td colspan="3" class="muted">加载中...</td></tr></tbody>
+          </table>
+          <h3 style="margin:12px 0 8px;font-size:0.95rem" id="tomorrowSellLabel">明日计划卖出</h3>
+          <table class="table signal-table">
+            <thead><tr><th>股票</th><th>数量</th><th>时机</th></tr></thead>
+            <tbody id="sellSignals"><tr><td colspan="3" class="muted">加载中...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="signal-col">
+          <h3 style="margin-bottom:8px;font-size:0.95rem">今日买入委托</h3>
+          <table class="table signal-table">
+            <thead><tr><th>股票</th><th>数量</th><th>状态</th></tr></thead>
+            <tbody id="todayBuyOrders"><tr><td colspan="3" class="muted">无数据</td></tr></tbody>
+          </table>
+          <h3 style="margin:12px 0 8px;font-size:0.95rem">今日卖出委托</h3>
+          <table class="table signal-table">
+            <thead><tr><th>股票</th><th>数量</th><th>状态</th></tr></thead>
+            <tbody id="todaySellOrders"><tr><td colspan="3" class="muted">无数据</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-header">
+        <h2 class="section-title">历史结算</h2>
+        <span class="muted">共 {{ settlements | length }} 个交易日</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>总资产</th>
+              <th>可用资金</th>
+              <th>持仓市值</th>
+              <th>当日盈亏</th>
+              <th>详情</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in settlements %}
+            <tr>
+              <td>{{ item.date }}</td>
+              <td>{{ "%.2f" | format(item.asset.total_asset) }}</td>
+              <td>{{ "%.2f" | format(item.asset.cash) }}</td>
+              <td>{{ "%.2f" | format(item.asset.market_value) }}</td>
+              <td class="{% if item.daily_pnl >= 0 %}positive{% else %}negative{% endif %}">{{ "%+.2f" | format(item.daily_pnl) }}</td>
+              <td><a class="link-btn" href="/dashboard/{{ item.date }}?account={{ account }}">详情</a></td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="muted">暂无历史结算数据</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const account = {{ account | tojson }};
+    const ctx = document.getElementById('assetChart');
+    let assetChart;
+
+    async function loadAssetHistory(days) {
+      const url = new URL('/api/dashboard/asset-history', window.location.origin);
+      url.searchParams.set('account', account);
+      if (days > 0) {
+        url.searchParams.set('days', String(days));
+      }
+      const response = await fetch(url);
+      const data = await response.json();
+      renderChart(data);
+    }
+
+    function renderChart(rows) {
+      const labels = rows.map((item) => item.date);
+      const values = rows.map((item) => item.total_asset);
+      if (assetChart) {
+        assetChart.destroy();
+      }
+      assetChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: '总资产',
+            data: values,
+            borderColor: '#d4a458',
+            backgroundColor: 'rgba(212, 164, 88, 0.08)',
+            fill: true,
+            tension: 0.25,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#a3afb8' } },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.06)' },
+              ticks: {
+                color: '#a3afb8',
+                callback(value) {
+                  return value.toFixed(2);
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    document.querySelectorAll('.range-btn').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.range-btn').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        loadAssetHistory(Number(button.dataset.days));
+      });
+    });
+
+    loadAssetHistory(7);
+
+    async function refreshRealtime() {
+      const btn = document.getElementById('refreshRealtimeBtn');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = '刷新中...';
+      try {
+        const resp = await fetch(`/api/dashboard/realtime?account=${account}`);
+        const data = await resp.json();
+        if (!resp.ok || !data.connected) {
+          alert(data.error || '实时数据不可用，请确保 QMT 代理已启动');
+          return;
+        }
+        updateCardsFromRealtime(data);
+        updatePositionsTable(data.positions || []);
+        updateBannerToRealtime();
+      } catch (error) {
+        alert(`实时刷新失败: ${error}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '手动刷新实时数据';
+      }
+    }
+
+    function updateCardsFromRealtime(data) {
+      document.querySelector('.card:nth-child(1) .card-value').textContent = (data.asset?.total_asset ?? 0).toFixed(2);
+      document.querySelector('.card:nth-child(2) .card-value').textContent = (data.asset?.cash ?? 0).toFixed(2);
+      document.querySelector('.card:nth-child(3) .card-value').textContent = (data.asset?.market_value ?? 0).toFixed(2);
+      const pnl = data.daily_pnl ?? 0;
+      const pnlEl = document.querySelector('.card:nth-child(4) .card-value');
+      pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+      document.querySelectorAll('.card-value').forEach(el => el.classList.remove('muted'));
+    }
+
+    function updatePositionsTable(positions) {
+      const tbody = document.querySelector('.section-box .table tbody');
+      tbody.innerHTML = positions.length ? positions.map(p => `
+        <tr>
+          <td>${p.stock_code}</td>
+          <td>${p.volume}</td>
+          <td>${p.can_use_volume}</td>
+          <td>${p.cost_price.toFixed(3)}</td>
+          <td>${p.market_value.toFixed(2)}</td>
+          <td class="${p.unrealized_pnl >= 0 ? 'positive' : 'negative'}">${(p.unrealized_pnl >= 0 ? '+' : '') + p.unrealized_pnl.toFixed(2)}</td>
+        </tr>
+      `).join('') : '<tr><td colspan="6" class="muted">暂无持仓数据</td></tr>';
+    }
+
+    function updateBannerToRealtime() {
+      const banner = document.querySelector('.info-banner');
+      if (!banner) return;
+      const hhmmss = new Date().toTimeString().slice(0, 8);
+      const btn = document.getElementById('refreshRealtimeBtn');
+      const btnHtml = btn ? btn.outerHTML : '';
+      banner.innerHTML = `实时数据 (${hhmmss})` + (btn ? ' ' + btnHtml : '');
+      banner.style.display = '';
+      // Re-bind the cloned button
+      document.getElementById('refreshRealtimeBtn')?.addEventListener('click', refreshRealtime);
+    }
+    document.getElementById('refreshRealtimeBtn')?.addEventListener('click', refreshRealtime);
+
+    // Load tomorrow's signals
+    fetch(`/api/dashboard/signals?account=${account}`)
+      .then(r => r.json())
+      .then(data => {
+        const signals = data.signals || [];
+        // Show the actual signal_date in the heading
+        const signalDate = data.batch_id ? data.batch_id.match(/\d{4}-\d{2}-\d{2}/)?.[0] : null;
+        if (signalDate) {
+          document.getElementById('tomorrowBuyLabel').textContent = `${signalDate} 计划买入`;
+          document.getElementById('tomorrowSellLabel').textContent = `${signalDate} 计划卖出`;
+        }
+        const buys = signals.filter(s => s.direction === 'buy');
+        const sells = signals.filter(s => s.direction === 'sell');
+        const buyBody = document.getElementById('buySignals');
+        const sellBody = document.getElementById('sellSignals');
+        buyBody.innerHTML = buys.length ? buys.map(s =>
+          `<tr><td>${s.stock_code}</td><td>${s.volume}</td><td>${s.timing || '-'}</td></tr>`
+        ).join('') : '<tr><td colspan="3" class="muted">无买入信号</td></tr>';
+        sellBody.innerHTML = sells.length ? sells.map(s =>
+          `<tr><td>${s.stock_code}</td><td>${s.volume}</td><td>${s.timing || '-'}</td></tr>`
+        ).join('') : '<tr><td colspan="3" class="muted">无卖出信号</td></tr>';
+      })
+      .catch(() => {
+        document.getElementById('buySignals').innerHTML = '<tr><td colspan="3" class="muted">信号获取失败</td></tr>';
+        document.getElementById('sellSignals').innerHTML = '<tr><td colspan="3" class="muted">信号获取失败</td></tr>';
+      });
+
+    // Load today's orders from latest settlement
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    fetch(`/api/dashboard/settlement/${todayStr}?account=${account}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || !data.orders) return;
+        const orders = data.orders || [];
+        const buyOrders = orders.filter(o => o.direction === 'buy');
+        const sellOrders = orders.filter(o => o.direction === 'sell');
+        const buyBody = document.getElementById('todayBuyOrders');
+        const sellBody = document.getElementById('todaySellOrders');
+        buyBody.innerHTML = buyOrders.length ? buyOrders.map(o =>
+          `<tr><td>${o.stock_code}</td><td>${o.order_volume}</td><td>${o.order_status || '-'}</td></tr>`
+        ).join('') : '<tr><td colspan="3" class="muted">无买入委托</td></tr>';
+        sellBody.innerHTML = sellOrders.length ? sellOrders.map(o =>
+          `<tr><td>${o.stock_code}</td><td>${o.order_volume}</td><td>${o.order_status || '-'}</td></tr>`
+        ).join('') : '<tr><td colspan="3" class="muted">无卖出委托</td></tr>';
+      })
+      .catch(() => {});
+
+    // Signal management
+    async function regenerateSignals() {
+      if (!confirm('从 AI 预测信号合并到执行队列？')) return;
+      const btn = document.getElementById('regenerateBtn');
+      btn.disabled = true;
+      btn.textContent = '获取中...';
+      try {
+        const resp = await fetch(`/api/dashboard/signals/regenerate?account=${account}`, { method: 'POST', headers: {'Content-Type': 'application/json'} });
+        const result = await resp.json();
+        if (resp.ok) {
+          alert(result.message || '生成完成');
+          location.reload();
+        } else {
+          alert('生成失败: ' + (result.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('操作失败: ' + e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '获取信号';
+      }
+    }
+
+    async function clearSignals(mode) {
+      const confirmed = mode === 'all' ? '清空执行队列' : mode === 'buy' ? '清除执行队列中的买入信号' : '清除执行队列中的卖出信号';
+      if (!confirm(`确认${confirmed}？`)) return;
+      try {
+        const resp = await fetch(`/api/dashboard/signals?account=${account}`, { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode}) });
+        const result = await resp.json();
+        alert(result.message || '操作完成');
+        location.reload();
+      } catch (e) {
+        alert('操作失败: ' + e);
+      }
+    }
+  </script>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeSettingsModal()">&times;</span>
+      <h2 style="margin-top:0">账户设置</h2>
+      <div class="settings-group">
+        <h3>模拟盘</h3>
+        <label><input type="checkbox" id="sim-enabled"> 启用账户</label>
+        <label>账户ID: <input type="text" id="sim-account-id" disabled></label>
+        <label><input type="checkbox" id="sim-repo-enabled"> 自动逆回购</label>
+        <label>逆回购金额下限: <input type="number" id="sim-repo-min" value="1000" min="1000" step="1000"> 元</label>
+      </div>
+      <div class="settings-group">
+        <h3>实盘</h3>
+        <label><input type="checkbox" id="live-enabled"> 启用账户</label>
+        <label>账户ID: <input type="text" id="live-account-id"></label>
+        <label><input type="checkbox" id="live-repo-enabled"> 自动逆回购</label>
+        <label>逆回购金额下限: <input type="number" id="live-repo-min" value="1000" min="1000" step="1000"> 元</label>
+      </div>
+      <button class="save-btn" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+
+  <script>
+    // Load settings on page load
+    fetch('/api/dashboard/account-settings')
+      .then(r => r.json())
+      .then(data => {
+        const sim = data.simulation || {};
+        const live = data.live || {};
+        document.getElementById('sim-enabled').checked = sim.enabled;
+        document.getElementById('sim-account-id').value = sim.account_id || '';
+        document.getElementById('sim-repo-enabled').checked = sim.auto_reverse_repo_enabled;
+        document.getElementById('sim-repo-min').value = sim.reverse_repo_min_amount || 1000;
+        document.getElementById('live-enabled').checked = live.enabled;
+        document.getElementById('live-account-id').value = live.account_id || '';
+        document.getElementById('live-repo-enabled').checked = live.auto_reverse_repo_enabled;
+        document.getElementById('live-repo-min').value = live.reverse_repo_min_amount || 1000;
+      });
+
+    function openSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'block';
+    }
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'none';
+    }
+    window.onclick = function(event) {
+      const modal = document.getElementById('settingsModal');
+      if (event.target === modal) closeSettingsModal();
+    }
+
+    async function saveSettings() {
+      const accounts = ['simulation', 'live'];
+      for (const acc of accounts) {
+        const prefix = acc === 'simulation' ? 'sim' : 'live';
+        const payload = {
+          account_type: acc,
+          enabled: document.getElementById(`${prefix}-enabled`).checked,
+          account_id: document.getElementById(`${prefix}-account-id`).value,
+          auto_reverse_repo_enabled: document.getElementById(`${prefix}-repo-enabled`).checked,
+          reverse_repo_min_amount: parseInt(document.getElementById(`${prefix}-repo-min`).value) || 1000,
+        };
+        await fetch('/api/dashboard/account-settings', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+      }
+      closeSettingsModal();
+      location.reload();
+    }
+  </script>
+</body>
+</html>

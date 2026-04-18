@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/static/nav.css">
+  <style>
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 20px; display: flex; align-items: center; gap: 12px; }
+    .provider-tag { font-size: 0.75rem; padding: 4px 10px; background: var(--primary); color: #070b10; border-radius: 12px; font-weight: 500; }
+    .controls { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
+    .controls select, .controls input { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 0.9rem; color: var(--text); background: var(--bg); transition: border-color 0.2s; }
+    .controls select:focus, .controls input:focus { outline: none; border-color: var(--primary); }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .card-title { font-size: 1rem; font-weight: 600; margin: 0; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--card-bg-alt); }
+    th { padding: 10px 14px; text-align: left; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+    tbody tr:hover { background: var(--row-hover); }
+    tbody tr:last-child td { border-bottom: none; }
+    .muted { color: var(--text-muted); }
+    .positive { color: var(--success); font-weight: 600; }
+    .negative { color: var(--danger); font-weight: 600; }
+    .memory-block { background: var(--bg); border-radius: 8px; padding: 14px; margin-bottom: 12px; font-size: 0.85rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--text-muted); border: 1px solid var(--border); max-height: 200px; overflow-y: auto; }
+    .memory-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 6px; }
+    .prompt-section { margin-top: 20px; }
+    .prompt-card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; }
+    .prompt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .prompt-meta { font-size: 0.8rem; color: var(--text-muted); }
+    .prompt-block { background: var(--bg); border-radius: 8px; padding: 14px; margin-bottom: 12px; font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-muted); border: 1px solid var(--border); max-height: 400px; overflow-y: auto; }
+    .toggle-btn { padding: 4px 12px; font-size: 0.75rem; background: var(--card-bg-alt); color: var(--text-muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .toggle-btn:hover { color: var(--text); border-color: var(--border-hover); }
+    .empty-state { padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+    .metric-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+    @media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 600px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+    .metric-box { background: var(--bg); border-radius: 6px; padding: 6px 4px; border: 1px solid var(--border); text-align: center; }
+    .metric-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 2px; }
+    .metric-value { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+  </style>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account=simulation">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent" class="active">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <main>
+    <h1>Agent <span class="provider-tag" id="providerTag">--</span></h1>
+    <div class="controls">
+      <select id="providerSelect" onchange="onProviderChange()"></select>
+      <span>日期:</span>
+      <input type="date" id="tradeDate" onchange="onDateChange()" />
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">策略指标</h2><span class="muted" id="metricWindow"></span></div>
+      <div class="metric-grid" id="metricGrid">
+        <div class="empty-state">加载中...</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">资金统计</h2><span class="muted" id="capitalDate"></span></div>
+      <div class="metric-grid" id="capitalGrid">
+        <div class="empty-state">加载中...</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Confidence 分位累计收益</h2><span class="muted" id="decileInfo"></span></div>
+      <canvas id="decileChart" height="90"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">资产曲线</h2></div>
+      <canvas id="curve" height="80"></canvas>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">持仓</h2><span class="muted" id="posCount"></span></div>
+        <table><thead><tr><th>股票</th><th>数量</th><th>成本价</th></tr></thead><tbody id="positions"></tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Memory</h2></div>
+        <div class="memory-label">Facts</div><div class="memory-block" id="facts"></div>
+        <div class="memory-label">Lessons</div><div class="memory-block" id="lessons"></div>
+      </div>
+    </div>
+    <div class="prompt-card">
+      <div class="prompt-header">
+        <h2 class="card-title">AI 对话记录</h2>
+        <span class="muted" id="promptHistoryCount"></span>
+      </div>
+      <div id="promptHistory"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">AI 信号 (Picks)</h2><span class="muted" id="sigCount"></span></div>
+      <table><thead><tr><th>股票</th><th>方向</th><th>数量</th><th>基准价</th><th>理由</th></tr></thead><tbody id="signalTable"></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">委托 / 成交记录</h2><span class="muted" id="tradeCount"></span></div>
+      <table><thead><tr><th>股票</th><th>方向</th><th>委托价</th><th>成交价</th><th>委托量</th><th>成交量</th><th>来源</th></tr></thead><tbody id="tradeTable"></tbody></table>
+    </div>
+  </main>
+  <script>
+    function lastTradingDate() {
+      const d = new Date();
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    const today = lastTradingDate();
+    const params = new URLSearchParams(window.location.search);
+    let tradeDate = params.get('date') || today;
+    let provider = params.get('provider') || '';
+
+    // 从 API 动态加载 enabled providers
+    fetch('/api/arena/all-equity-curve?days=1')
+      .then(r => r.json())
+      .then(data => {
+        const sel = document.getElementById('providerSelect');
+        const enabled = data.providers || [];
+        sel.innerHTML = enabled.map(p => `<option value="${p.provider}">${p.provider}</option>`).join('');
+        if (!enabled.length) {
+          document.getElementById('providerTag').textContent = 'none';
+          document.getElementById('metricWindow').textContent = '';
+          document.getElementById('metricGrid').innerHTML = '<div class="empty-state">暂无 provider</div>';
+          document.getElementById('positions').innerHTML = '<tr><td colspan="3" class="empty-state">暂无 provider</td></tr>';
+          document.getElementById('signalTable').innerHTML = '<tr><td colspan="5" class="empty-state">暂无 provider</td></tr>';
+          document.getElementById('tradeTable').innerHTML = '<tr><td colspan="7" class="empty-state">暂无 provider</td></tr>';
+          return;
+        }
+        if (!provider || !enabled.find(p => p.provider === provider)) {
+          provider = enabled[0].provider;
+        }
+        sel.value = provider;
+        document.getElementById('providerTag').textContent = provider;
+        loadAll();
+      })
+      .catch(() => {
+        document.getElementById('providerTag').textContent = provider || 'unknown';
+        if (provider) {
+          loadAll();
+        }
+      });
+    document.getElementById('tradeDate').value = tradeDate;
+    document.getElementById('providerTag').textContent = provider;
+    function onProviderChange() { window.location.href = `/api/arena/page/agent?provider=${document.getElementById('providerSelect').value}&date=${tradeDate}`; }
+    function onDateChange() { tradeDate = document.getElementById('tradeDate').value; loadSignalsAndTrades(); }
+    let chartInstance = null;
+    let decileChartInstance = null;
+    function renderMetrics(metrics, days) {
+      const grid = document.getElementById('metricGrid');
+      document.getElementById('metricWindow').textContent = `近 ${days} 天`;
+      const entries = [
+        ['Sharpe', (metrics.sharpe_ratio || 0).toFixed(2)],
+        ['Alpha', `${(metrics.alpha_pct || 0).toFixed(2)}%`],
+        ['Beta', (metrics.beta || 0).toFixed(2)],
+        ['MaxDD', `${(metrics.max_drawdown_pct || 0).toFixed(2)}%`],
+        ['Win Rate', `${((metrics.win_rate || 0) * 100).toFixed(1)}%`],
+        ['Calmar', (metrics.calmar_ratio || 0).toFixed(2)],
+        ['Annual', `${(metrics.annual_return_pct || 0).toFixed(2)}%`],
+        ['Volatility', `${(metrics.volatility_pct || 0).toFixed(2)}%`],
+      ];
+      grid.innerHTML = entries.map(([label, value]) => `
+        <div class="metric-box">
+          <div class="metric-label">${label}</div>
+          <div class="metric-value">${value}</div>
+        </div>
+      `).join('');
+    }
+    function loadAll() {
+      if (!provider) {
+        return;
+      }
+      Promise.all([
+        fetch(`/api/arena/${provider}/equity-curve?days=30`).then(r => r.json()),
+        fetch(`/api/arena/${provider}/positions`).then(r => r.json()),
+        fetch(`/api/arena/${provider}/memory`).then(r => r.json()),
+        fetch(`/api/arena/${provider}/metrics?days=30`).then(r => r.json()),
+      ]).then(([curve, positions, memory, metricPayload]) => {
+        renderMetrics(metricPayload.metrics || {}, metricPayload.days || 30);
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(document.getElementById('curve'), {
+          type: 'line',
+          data: { labels: curve.curve.map(i => i.trade_date), datasets: [{ label: '总资产', data: curve.curve.map(i => i.total_asset || 0), borderColor: '#d4a458', backgroundColor: 'rgba(212,164,88,0.08)', fill: true, tension: 0.25, pointRadius: 0, pointHoverRadius: 4, borderWidth: 2 }] },
+          options: { responsive: true, plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', callbacks: { label: ctx => `${(ctx.raw / 10000).toFixed(1)}万` } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#a3afb8' } }, y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { callback: v => (v / 10000).toFixed(0) + '万', color: '#a3afb8' } } } },
+        });
+        const rawPositions = positions.positions;
+        const pe = Array.isArray(rawPositions)
+          ? rawPositions.map(item => [item.stock_code || '-', item])
+          : Object.entries(rawPositions || {});
+        document.getElementById('posCount').textContent = `${pe.length} 只`;
+        document.getElementById('positions').innerHTML = pe.length ? pe.map(([c, i]) => `<tr><td style="font-weight:500">${c}</td><td>${i.volume || i.shares || 0}</td><td>${(i.avg_price || i.cost_price || 0).toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-state">暂无持仓</td></tr>';
+        document.getElementById('facts').textContent = memory.facts || '暂无记录';
+        document.getElementById('lessons').textContent = memory.lessons || '暂无记录';
+
+        // 资金统计
+        const totalAsset = positions.total_asset || 0;
+        const cash = positions.cash || 0;
+        const marketValue = positions.market_value || 0;
+        const deployable = Math.min(totalAsset / 2, cash);
+        document.getElementById('capitalDate').textContent = totalAsset > 0 ? '' : '无数据';
+        document.getElementById('capitalGrid').innerHTML = [
+          ['总资产', `${(totalAsset / 10000).toFixed(1)}万`],
+          ['持仓市值', `${(marketValue / 10000).toFixed(1)}万`],
+          ['可用现金', `${(cash / 10000).toFixed(1)}万`],
+          ['明日可买', `${(deployable / 10000).toFixed(1)}万`],
+        ].map(([label, value]) => `
+          <div class="metric-box">
+            <div class="metric-label">${label}</div>
+            <div class="metric-value">${value}</div>
+          </div>
+        `).join('');
+      });
+      loadSignalsAndTrades();
+      loadPromptHistory();
+      loadDeciles();
+    }
+    function loadPromptHistory() {
+      fetch(`/api/arena/${provider}/prompt-history?limit=7`).then(r => r.json()).then(history => {
+        document.getElementById('promptHistoryCount').textContent = `${history.length} 天`;
+        if (!history.length) {
+          document.getElementById('promptHistory').innerHTML = '<div class="empty-state">暂无对话记录</div>';
+          return;
+        }
+        document.getElementById('promptHistory').innerHTML = history.map(item => {
+          const modelTag = item.actual_model !== item.requested_model
+            ? `<span style="color:var(--danger);font-size:0.75rem;margin-left:8px">${item.requested_model} -> ${item.actual_model}</span>`
+            : `<span style="color:var(--text-muted);font-size:0.75rem;margin-left:8px">${item.requested_model || ''}</span>`;
+          const parseTag = item.parse_mode
+            ? `<span style="color:var(--primary);font-size:0.75rem">${item.parse_mode}</span>`
+            : '';
+          const truncTag = item.response_truncated
+            ? `<span style="color:var(--danger);font-size:0.75rem">疑似截断</span>`
+            : '';
+          const statusTag = item.status && item.status !== 'success'
+            ? `<span style="color:var(--danger);font-size:0.75rem">${item.status}</span>`
+            : '';
+          const sigBadge = item.signal_count > 0
+            ? `<span style="color:var(--success);font-size:0.75rem">${item.signal_count} 条信号</span>`
+            : `<span style="color:var(--danger);font-size:0.75rem">0 条信号</span>`;
+          return `
+            <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:12px;overflow:hidden">
+              <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:var(--card-bg-alt)" onclick="_toggleDate(this)">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="color:var(--primary);font-weight:600;font-size:0.9rem">${item.trade_date}</span>
+                  ${modelTag}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  ${sigBadge}${parseTag}${truncTag}${statusTag}
+                </div>
+              </div>
+              <div class="prompt-detail" data-date="${item.trade_date}" style="display:none;padding:14px">
+                <div class="memory-label">System Prompt</div>
+                <div class="prompt-block">加载中...</div>
+                <div class="memory-label">User Prompt</div>
+                <div class="prompt-block">加载中...</div>
+                <div class="memory-label">模型响应</div>
+                <div class="prompt-block">加载中...</div>
+              </div>
+            </div>`;
+        }).join('');
+      });
+    }
+    function _toggleDate(header) {
+      const detail = header.nextElementSibling;
+      if (detail.style.display === 'none') {
+        detail.style.display = 'block';
+        if (!detail.dataset.loaded) {
+          const d = detail.dataset.date;
+          fetch(`/api/arena/${provider}/prompt/${d}`).then(r => r.json()).then(data => {
+            const blocks = detail.querySelectorAll('.prompt-block');
+            blocks[0].textContent = data.system_prompt || '无记录';
+            blocks[1].textContent = data.user_prompt || '无记录';
+            blocks[2].textContent = data.raw_response || '无记录';
+            detail.dataset.loaded = '1';
+          });
+        }
+      } else {
+        detail.style.display = 'none';
+      }
+    }
+    function loadDeciles() {
+      fetch(`/api/arena/${provider}/confidence-deciles`).then(r => r.json()).then(data => {
+        const series = data.series || [];
+        const dates = data.dates || [];
+        document.getElementById('decileInfo').textContent = `${data.total_picks || 0} picks / ${dates.length} days`;
+
+        if (decileChartInstance) decileChartInstance.destroy();
+
+        const canvas = document.getElementById('decileChart');
+        const chartCard = canvas.parentElement;
+        const oldHint = chartCard.querySelector('.decile-hint');
+        if (oldHint) oldHint.remove();
+
+        if (!series.length || !dates.length) {
+          chartCard.insertAdjacentHTML('beforeend', '<div class="decile-hint empty-state">暂无 Review 数据</div>');
+          return;
+        }
+
+        const singlePoint = dates.length === 1;
+        if (singlePoint) {
+          chartCard.insertAdjacentHTML('beforeend', '<div class="decile-hint" style="text-align:center;color:var(--text-muted);font-size:0.8rem;margin-top:8px">仅 1 个 Review 日数据，已以散点展示；更多交易日后会连成曲线</div>');
+        }
+
+        const colors = ['#ef5350','#fb8c00','#fdd835','#c0ca33','#66bb6a','#26a69a','#29b6f6','#42a5f5','#5c6bc0','#ab47bc'];
+        decileChartInstance = new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: dates,
+            datasets: series.map((s, idx) => ({
+              label: s.name,
+              data: s.values,
+              borderColor: colors[idx % colors.length],
+              backgroundColor: colors[idx % colors.length],
+              pointRadius: singlePoint ? 5 : 2,
+              pointHoverRadius: singlePoint ? 8 : 5,
+              tension: 0.2,
+              borderWidth: 2,
+              fill: false,
+              showLine: !singlePoint,
+            })),
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: '#a3afb8', boxWidth: 12 } },
+              tooltip: {
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                callbacks: {
+                  label: ctx => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(2)}%`,
+                },
+              },
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#a3afb8', maxTicksLimit: 8 } },
+              y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { callback: v => v.toFixed(1) + '%', color: '#a3afb8' } },
+            },
+          },
+        });
+      });
+    }
+    function loadSignalsAndTrades() {
+      Promise.all([
+        fetch(`/api/arena/signals/${provider}/${tradeDate}`).then(r => r.json()),
+        fetch(`/api/arena/trades/${provider}/${tradeDate}`).then(r => r.json()),
+      ]).then(([sd, td]) => {
+        const sigs = sd.signals || [];
+        document.getElementById('sigCount').textContent = `${sigs.length} 条`;
+        document.getElementById('signalTable').innerHTML = sigs.length ? sigs.map(s => `<tr><td style="font-weight:500">${s.stock_code}</td><td><span class="${s.direction==='buy'?'positive':'negative'}">${s.direction}</span></td><td>${s.volume}</td><td>${(s.price||0).toFixed(2)}</td><td class="muted">${s.reason||'-'}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-state">无信号数据</td></tr>';
+        const trades = td.trades || [];
+        document.getElementById('tradeCount').textContent = `${trades.length} 笔`;
+        document.getElementById('tradeTable').innerHTML = trades.length ? trades.map(t => `<tr><td style="font-weight:500">${t.stock_code}</td><td><span class="${t.direction==='buy'?'positive':'negative'}">${t.direction}</span></td><td>${(t.order_price||0).toFixed(2)}</td><td>${(t.price||0).toFixed(2)}</td><td>${t.order_volume||0}</td><td>${t.volume||0}</td><td class="muted">${t.fill_source||'-'}</td></tr>`).join('') : '<tr><td colspan="7" class="empty-state">无交易记录</td></tr>';
+      });
+    }
+  </script>
+</body>
+</html>

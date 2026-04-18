@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/static/nav.css">
+  <style>
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 8px; color: var(--text); }
+    .subtitle { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 24px; }
+    .controls { display: flex; gap: 12px; margin-bottom: 24px; align-items: center; }
+    .controls input { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 0.9rem; color: var(--text); background: var(--bg); }
+    .controls input:focus { outline: none; border-color: var(--primary); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); transition: border-color 0.2s; }
+    .card:hover { border-color: var(--border-hover); }
+    .card-header { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .card-title { font-size: 1rem; font-weight: 600; margin: 0; color: var(--primary); }
+    .card-date { font-size: 0.8rem; color: var(--text-muted); }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .metric-box { background: var(--bg); border-radius: 8px; padding: 12px; text-align: center; border: 1px solid var(--border); }
+    .metric-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; }
+    .metric-value { font-size: 1.2rem; font-weight: 700; }
+    .metric-value.positive { color: var(--success); }
+    .metric-value.negative { color: var(--danger); }
+    .lessons-section { border-top: 1px solid var(--border); padding-top: 12px; }
+    .lessons-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px; }
+    .lessons-list { padding-left: 18px; margin: 0; }
+    .lessons-list li { font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted); line-height: 1.5; }
+    .empty-state { padding: 48px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+    .chart-card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; }
+    .chart-header { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .chart-title { font-size: 1rem; font-weight: 600; margin: 0; color: var(--primary); }
+    .chart-info { font-size: 0.8rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account=simulation">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review" class="active">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <main>
+    <h1 id="title">Agent Review</h1>
+    <p class="subtitle">每个 Agent 的日终复盘：命中率、超额收益和经验教训</p>
+    <div class="controls">
+      <span style="color:var(--text-muted);font-size:0.85rem">日期:</span>
+      <input type="date" id="dateInput" onchange="loadData()">
+    </div>
+
+    <!-- 命中率曲线卡片 -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2 class="chart-title">命中率趋势</h2>
+        <span class="chart-info" id="hitRateInfo">--</span>
+      </div>
+      <canvas id="hitRateChart" height="80"></canvas>
+    </div>
+
+    <div class="grid" id="reviews"></div>
+  </main>
+  <script>
+    function lastTradingDate() {
+      const d = new Date();
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    const localDate = lastTradingDate();
+    document.getElementById('dateInput').value = localDate;
+
+    let hitRateChartInstance = null;
+
+    function loadHitRateCurve() {
+      // 先获取所有 enabled providers
+      fetch('/api/arena/all-equity-curve?days=1')
+        .then(r => {
+          if (!r.ok) throw new Error('all-equity-curve failed: ' + r.status);
+          return r.json();
+        })
+        .then(data => {
+          const providers = (data.providers || []).map(p => p.provider);
+          document.getElementById('hitRateInfo').textContent = 'providers: ' + providers.length;
+          if (!providers.length) {
+            return [];
+          }
+          // 逐个获取每个 provider 的命中率曲线
+          return Promise.all(
+            providers.map(p =>
+              fetch(`/api/arena/${p}/hit-rate-curve`).then(r => {
+                if (!r.ok) throw new Error(p + ' hit-rate-curve failed: ' + r.status);
+                return r.json();
+              })
+            )
+          );
+        })
+        .then(allData => {
+          if (!allData || !allData.length) {
+            document.getElementById('hitRateInfo').textContent = '无复盘数据 allData=' + JSON.stringify(allData);
+            return;
+          }
+
+          // 合并所有日期（去重排序）
+          const dateSet = new Set();
+          allData.forEach(d => (d.dates || []).forEach(dt => dateSet.add(dt)));
+          const dates = [...dateSet].sort();
+
+          document.getElementById('hitRateInfo').textContent =
+            `${allData.length} agents / ${dates.length} days`;
+
+          const colors = ['#d4a458','#ef5350','#66bb6a','#42a5f5','#ab47bc','#fb8c00','#26a69a','#5c6bc0'];
+          const datasets = allData.map((d, idx) => {
+            const rateMap = {};
+            (d.dates || []).forEach((dt, i) => { rateMap[dt] = d.hit_rates[i]; });
+            return {
+              label: d.provider,
+              data: dates.map(dt => rateMap[dt] !== undefined ? rateMap[dt] : null),
+              borderColor: colors[idx % colors.length],
+              backgroundColor: colors[idx % colors.length],
+              tension: 0.3,
+              pointRadius: dates.length <= 10 ? 4 : 2,
+              pointHoverRadius: 6,
+              borderWidth: 2,
+              fill: false,
+              spanGaps: true,
+            };
+          });
+
+          if (hitRateChartInstance) hitRateChartInstance.destroy();
+
+          hitRateChartInstance = new Chart(document.getElementById('hitRateChart'), {
+            type: 'line',
+            data: { labels: dates, datasets },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { position: 'bottom', labels: { color: '#a3afb8', boxWidth: 12 } },
+                tooltip: {
+                  backgroundColor: 'rgba(0,0,0,0.8)',
+                  callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}%` },
+                },
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { color: '#a3afb8', maxTicksLimit: 10 } },
+                y: {
+                  grid: { color: 'rgba(255,255,255,0.06)' },
+                  ticks: { callback: v => v + '%', color: '#a3afb8' },
+                  min: 0, max: 100,
+                },
+              },
+            },
+          });
+        })
+        .catch(err => {
+          document.getElementById('hitRateInfo').textContent = 'Error: ' + err.message;
+          console.error('loadHitRateCurve error:', err);
+        });
+    }
+
+    function loadData() {
+      const tradeDate = document.getElementById('dateInput').value || localDate;
+      document.getElementById('title').textContent = `复盘: ${tradeDate}`;
+      fetch(`/api/arena/timeline/${tradeDate}`)
+        .then(r => r.ok ? r.json() : { reviews: [] })
+        .then(data => {
+          document.getElementById('reviews').innerHTML = (data.reviews || []).map(item => {
+            const hrClass = (item.hit_rate || 0) >= 0.5 ? 'positive' : 'negative';
+            const erClass = (item.excess_return || 0) >= 0 ? 'positive' : 'negative';
+            return `<div class="card">
+              <div class="card-header">
+                <div class="card-title">${item.provider}</div>
+                <div class="card-date">${tradeDate}</div>
+              </div>
+              <div class="metrics">
+                <div class="metric-box">
+                  <div class="metric-label">命中率</div>
+                  <div class="metric-value ${hrClass}">${((item.hit_rate||0)*100).toFixed(1)}%</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-label">超额收益</div>
+                  <div class="metric-value ${erClass}">${(item.excess_return||0).toFixed(2)}%</div>
+                </div>
+              </div>
+              ${(item.lessons||[]).length ? `<div class="lessons-section"><div class="lessons-title">Lessons</div><ul class="lessons-list">${item.lessons.map(l => `<li>${l}</li>`).join('')}</ul></div>` : ''}
+            </div>`;
+          }).join('') || `
+            <div class="empty-state">
+              暂无复盘数据，请先运行 <code>python main.py arena-review --date ${tradeDate}</code>
+            </div>
+          `;
+        });
+    }
+    loadHitRateCurve();
+    loadData();
+  </script>
+</body>
+</html>

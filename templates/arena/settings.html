@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings</title>
+  <link rel="stylesheet" href="/static/nav.css">
+  <style>
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 8px; color: var(--text); }
+    .subtitle { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 20px; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+    .card-title { font-size: 1rem; font-weight: 600; color: var(--primary); margin: 0 0 16px; }
+    .form-row { display: flex; align-items: center; margin-bottom: 12px; gap: 12px; }
+    .form-label { min-width: 140px; font-size: 0.85rem; color: var(--text-muted); }
+    .form-value { flex: 1; font-size: 0.9rem; color: var(--text); }
+    input[type="text"], input[type="number"], select {
+      width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 0.9rem; box-sizing: border-box;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--primary); }
+    .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0; background: var(--border);
+      border-radius: 24px; transition: 0.2s;
+    }
+    .toggle-slider::before {
+      content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background: var(--text); border-radius: 50%; transition: 0.2s;
+    }
+    .toggle input:checked + .toggle-slider { background: var(--success); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+    .btn {
+      padding: 10px 24px; border-radius: 8px; border: none; font-size: 0.9rem;
+      font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+    }
+    .btn-primary { background: var(--primary); color: #000; }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-secondary { background: var(--border); color: var(--text); margin-left: 8px; }
+    .btn-check { background: var(--success); color: #fff; }
+    .actions { margin-top: 20px; display: flex; gap: 12px; align-items: center; }
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px;
+      font-size: 0.9rem; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s;
+    }
+    .toast.show { opacity: 1; }
+    .toast.ok { background: var(--success); color: #fff; }
+    .toast.err { background: var(--danger); color: #fff; }
+    .check-result { margin-top: 16px; }
+    .check-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); gap: 10px; }
+    .check-row:last-child { border-bottom: none; }
+    .check-icon { font-size: 1.1rem; }
+    .check-name { min-width: 160px; font-size: 0.9rem; color: var(--text); }
+    .check-detail { font-size: 0.85rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account=simulation">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings" class="active">Settings</a>
+    </div>
+  </nav>
+  <main>
+    <h1>Settings</h1>
+    <p class="subtitle">系统配置：信号源、AI Provider、账户和连通性检查</p>
+
+    <div class="grid">
+      <!-- Signal Source -->
+      <div class="card">
+        <h2 class="card-title">Signal Source</h2>
+        <div class="form-row">
+          <span class="form-label">Mode</span>
+          <select id="signalMode">
+            <option value="arena">Arena (multi-agent)</option>
+            <option value="remote">Remote HTTP</option>
+            <option value="mock">Mock API</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <span class="form-label">Remote URL</span>
+          <input type="text" id="remoteUrl" placeholder="http://host:port/api/signals">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Execution Provider</span>
+          <select id="execProvider"></select>
+        </div>
+      </div>
+
+      <!-- MongoDB -->
+      <div class="card">
+        <h2 class="card-title">MongoDB</h2>
+        <div class="form-row">
+          <span class="form-label">URI</span>
+          <input type="text" id="mongoUri">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Database</span>
+          <input type="text" id="mongoDb">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Qlibrd DB</span>
+          <input type="text" id="mongoQlibrdDb">
+        </div>
+      </div>
+
+      <!-- Accounts -->
+      <div class="card" id="accountsCard">
+        <h2 class="card-title">Accounts</h2>
+        <div id="accountsContent"></div>
+      </div>
+
+      <!-- Providers -->
+      <div class="card">
+        <h2 class="card-title">AI Providers</h2>
+        <div id="providersContent"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="saveAll()">Save</button>
+      <button class="btn btn-secondary" onclick="loadConfig()">Reset</button>
+      <button class="btn btn-check" onclick="runCheck()">Connectivity Check</button>
+    </div>
+
+    <div class="check-result" id="checkResult"></div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    function toast(msg, ok = true) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show ' + (ok ? 'ok' : 'err');
+      setTimeout(() => el.className = 'toast', 2500);
+    }
+
+    function loadConfig() {
+      fetch('/api/arena/settings').then(r => r.json()).then(cfg => {
+        // Signal source
+        document.getElementById('signalMode').value = cfg.signal_source?.mode || 'arena';
+        document.getElementById('remoteUrl').value = cfg.signal_source?.remote_url || '';
+        // Exec provider
+        const sel = document.getElementById('execProvider');
+        sel.innerHTML = '';
+        const providers = cfg.arena?.providers || {};
+        for (const [name, p] of Object.entries(providers)) {
+          const opt = document.createElement('option');
+          opt.value = name; opt.textContent = `${name} (${p.model || ''})`;
+          sel.appendChild(opt);
+        }
+        sel.value = cfg.arena?.execution_provider || '';
+
+        // MongoDB
+        document.getElementById('mongoUri').value = cfg.mongodb?.uri || '';
+        document.getElementById('mongoDb').value = cfg.mongodb?.database || '';
+        document.getElementById('mongoQlibrdDb').value = cfg.mongodb?.qlibrd_db || '';
+
+        // Accounts
+        const accDiv = document.getElementById('accountsContent');
+        accDiv.innerHTML = '';
+        for (const [type, acc] of Object.entries(cfg.accounts || {})) {
+          accDiv.innerHTML += `
+            <div style="margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+              <div style="font-weight:600;margin-bottom:8px;color:var(--primary)">${type}</div>
+              <div class="form-row">
+                <span class="form-label">Enabled</span>
+                <label class="toggle"><input type="checkbox" id="acc_${type}_enabled" ${acc.enabled ? 'checked' : ''}><span class="toggle-slider"></span></label>
+              </div>
+              <div class="form-row">
+                <span class="form-label">QMT Path</span>
+                <input type="text" id="acc_${type}_qmt_path" value="${acc.qmt_path || ''}">
+              </div>
+              <div class="form-row">
+                <span class="form-label">Account ID</span>
+                <input type="text" id="acc_${type}_account_id" value="${acc.account_id || ''}">
+              </div>
+              <div class="form-row">
+                <span class="form-label">Proxy Port</span>
+                <input type="number" id="acc_${type}_proxy_port" value="${acc.proxy_port || ''}">
+              </div>
+            </div>`;
+        }
+
+        // Providers
+        const provDiv = document.getElementById('providersContent');
+        provDiv.innerHTML = '';
+        for (const [name, p] of Object.entries(providers)) {
+          provDiv.innerHTML += `
+            <div style="margin-bottom:12px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <label class="toggle"><input type="checkbox" id="prov_${name}_enabled" ${p.enabled ? 'checked' : ''}><span class="toggle-slider"></span></label>
+                <span style="font-weight:600;color:var(--primary)">${name}</span>
+                <span style="font-size:0.8rem;color:var(--text-muted)">${p.type}</span>
+              </div>
+              <div class="form-row">
+                <span class="form-label">Base URL</span>
+                <input type="text" id="prov_${name}_base_url" value="${p.base_url || ''}">
+              </div>
+              <div class="form-row">
+                <span class="form-label">Model</span>
+                <input type="text" id="prov_${name}_model" value="${p.model || ''}">
+              </div>
+              <div class="form-row">
+                <span class="form-label">Capital Pool</span>
+                <input type="number" id="prov_${name}_capital_pool" value="${p.capital_pool || 5000000}">
+              </div>
+              <div class="form-row">
+                <span class="form-label">Timeout</span>
+                <input type="number" id="prov_${name}_timeout" value="${p.timeout || 300}">
+              </div>
+            </div>`;
+        }
+      }).catch(e => toast('Failed to load config: ' + e.message, false));
+    }
+
+    function collectPayload() {
+      const cfg = { signal_source: {}, arena: { providers: {} }, mongodb: {}, accounts: {} };
+      cfg.signal_source.mode = document.getElementById('signalMode').value;
+      cfg.signal_source.remote_url = document.getElementById('remoteUrl').value;
+      cfg.arena.execution_provider = document.getElementById('execProvider').value;
+      cfg.mongodb.uri = document.getElementById('mongoUri').value;
+      cfg.mongodb.database = document.getElementById('mongoDb').value;
+      cfg.mongodb.qlibrd_db = document.getElementById('mongoQlibrdDb').value;
+
+      // Collect account fields
+      document.querySelectorAll('[id^="acc_"]').forEach(el => {
+        const parts = el.id.replace('acc_', '').split('_');
+        const type = parts[0];
+        const field = parts.slice(1).join('_');
+        if (!cfg.accounts[type]) cfg.accounts[type] = {};
+        if (el.type === 'checkbox') cfg.accounts[type][field] = el.checked;
+        else if (el.type === 'number') cfg.accounts[type][field] = Number(el.value);
+        else cfg.accounts[type][field] = el.value;
+      });
+
+      // Collect provider fields
+      document.querySelectorAll('[id^="prov_"]').forEach(el => {
+        const parts = el.id.replace('prov_', '').split('_');
+        // Provider names can contain underscores (e.g. nadirclaw_claude_sonnet)
+        // Fields are always the last segment: enabled, base_url, model, capital_pool, timeout
+        const knownFields = ['enabled', 'base_url', 'model', 'capital_pool', 'timeout'];
+        let field = null, name = null;
+        for (const f of knownFields) {
+          if (el.id.endsWith('_' + f)) {
+            field = f;
+            name = el.id.substring('prov_'.length, el.id.length - f.length - 1);
+            break;
+          }
+        }
+        if (!field || !name) return;
+        if (!cfg.arena.providers[name]) cfg.arena.providers[name] = {};
+        if (el.type === 'checkbox') cfg.arena.providers[name][field] = el.checked;
+        else if (el.type === 'number') cfg.arena.providers[name][field] = Number(el.value);
+        else cfg.arena.providers[name][field] = el.value;
+      });
+
+      return cfg;
+    }
+
+    function saveAll() {
+      const payload = collectPayload();
+      fetch('/api/arena/settings', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) })
+        .then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error || 'Save failed'); }))
+        .then(() => toast('Settings saved'))
+        .catch(e => toast(e.message, false));
+    }
+
+    function runCheck() {
+      const el = document.getElementById('checkResult');
+      el.innerHTML = '<div style="color:var(--text-muted);padding:12px">Checking...</div>';
+      fetch('/api/arena/connectivity-check')
+        .then(r => r.json())
+        .then(data => {
+          el.innerHTML = '<div class="card"><h2 class="card-title">Connectivity Check</h2>' +
+            data.checks.map(c => {
+              const icon = c.status === 'ok' ? '✅' : c.status === 'warn' ? '⚠️' : '❌';
+              return `<div class="check-row">
+                <span class="check-icon">${icon}</span>
+                <span class="check-name">${c.name}</span>
+                <span class="check-detail">${c.detail}</span>
+              </div>`;
+            }).join('') + '</div>';
+        })
+        .catch(e => { el.innerHTML = `<div style="color:var(--danger);padding:12px">Check failed: ${e.message}</div>`; });
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>

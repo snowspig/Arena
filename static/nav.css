@@ -1,0 +1,122 @@
+/* ===== Dark Fintech Theme ===== */
+/* Unified CSS variables for ALL pages (Dashboard + Arena) */
+:root {
+  /* Backgrounds */
+  --bg: #070b10;
+  --card-bg: #0f171e;
+  --card-bg-hover: #141e28;
+  --card-bg-alt: #111b24;
+
+  /* Text */
+  --text: #f2efe6;
+  --text-muted: #a3afb8;
+  --text-dim: rgba(255,255,255,0.4);
+
+  /* Brand & Accent */
+  --primary: #d4a458;
+  --primary-hover: #e0ba74;
+  --primary-dim: rgba(212,164,88,0.15);
+
+  /* Semantic */
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+
+  /* Borders & Shadows */
+  --border: rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.15);
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.4);
+
+  /* Navigation */
+  --nav-bg: linear-gradient(135deg, #0d1420 0%, #070b10 100%);
+  --nav-height: 56px;
+
+  /* Table */
+  --thead-bg: #111b24;
+  --row-hover: rgba(255,255,255,0.03);
+
+  /* Podium */
+  --gold: linear-gradient(135deg, #c99549, #e0ba74);
+  --silver: linear-gradient(135deg, #94a3b8, #cbd5e1);
+  --bronze: linear-gradient(135deg, #cd7f32, #e0a458);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Top Navigation Banner ===== */
+.top-banner {
+  background: var(--nav-bg);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: var(--nav-height);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid var(--border);
+}
+
+.banner-brand {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-right: 32px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.banner-nav {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.banner-nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.banner-nav a:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.06);
+}
+
+.banner-nav a.active {
+  color: var(--primary);
+  background: var(--primary-dim);
+}
+
+.banner-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 8px;
+}
+
+.banner-section-label {
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 4px;
+  white-space: nowrap;
+}

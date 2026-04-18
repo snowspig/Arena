@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Health</title>
+  <link rel="stylesheet" href="/static/nav.css">
+  <style>
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 8px; color: var(--text); }
+    .subtitle { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 24px; }
+    .table-wrap { background: var(--card-bg); border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--card-bg-alt); }
+    th { padding: 14px 16px; text-align: left; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+    td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 0.9rem; color: var(--text); }
+    tbody tr:hover { background: var(--row-hover); }
+    tbody tr:last-child td { border-bottom: none; }
+    .alert { background: rgba(239,68,68,0.06); }
+    .healthy { color: var(--success); font-weight: 600; }
+    .warning { color: var(--warning); font-weight: 600; }
+    .provider-name { color: var(--primary); font-weight: 600; }
+    .empty-state { padding: 48px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+    .status-dot.ok { background: var(--success); }
+    .status-dot.warn { background: var(--warning); }
+    .status-dot.err { background: var(--danger); }
+  </style>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account=simulation">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health" class="active">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <main>
+    <h1>Provider Health</h1>
+    <p class="subtitle">各 AI Provider 的运行状态、成功率和异常记录</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Provider</th><th>状态</th><th>成功率</th><th>重试次数</th><th>失败次数</th><th>最近运行</th></tr></thead>
+        <tbody id="health"></tbody>
+      </table>
+    </div>
+  </main>
+  <script>
+    fetch('/api/arena/health').then(r => r.json()).then(data => {
+      document.getElementById('health').innerHTML = (data.providers || []).map(item => {
+        const rowClass = item.fallback_count > 0 ? 'alert' : '';
+        const rate = item.success_rate || 0;
+        const rateClass = rate >= 0.9 ? 'healthy' : rate >= 0.5 ? 'warning' : 'err';
+        const dotClass = rate >= 0.9 ? 'ok' : rate >= 0.5 ? 'warn' : 'err';
+        return `<tr class="${rowClass}">
+          <td class="provider-name">${item.provider}</td>
+          <td><span class="status-dot ${dotClass}"></span><span class="${rateClass}">${rate >= 0.9 ? '正常' : rate >= 0.5 ? '不稳定' : '异常'}</span></td>
+          <td class="${rateClass}">${(rate * 100).toFixed(1)}%</td>
+          <td>${item.fallback_count}</td>
+          <td>${item.failure_count}</td>
+          <td style="color:var(--text-muted)">${item.last_generated_at || '-'}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" class="empty-state">暂无数据</td></tr>';
+    });
+  </script>
+</body>
+</html>

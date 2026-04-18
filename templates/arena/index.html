@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arena Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/static/nav.css">
+  <style>
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.75rem; font-weight: 600; margin: 0 0 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+    .card-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px; }
+    .card-value { font-size: 1.5rem; font-weight: 700; }
+    .curve-wrap { background: var(--card-bg); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 24px; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .section-title { font-size: 1.1rem; font-weight: 600; margin: 0; }
+    .range-btns { display: flex; gap: 8px; }
+    .range-btns button { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 0.85rem; color: var(--text-muted); transition: all 0.2s; }
+    .range-btns button:hover { border-color: var(--primary); color: var(--primary); }
+    .range-btns button.active { background: var(--primary); color: #070b10; border-color: var(--primary); }
+    .rank-table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); }
+    .rank-table thead { background: var(--card-bg-alt); }
+    .rank-table th { padding: 12px 16px; text-align: left; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+    .rank-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .rank-table tbody tr:hover { background: var(--row-hover); }
+    .rank-table tbody tr:last-child td { border-bottom: none; }
+    .muted { color: var(--text-muted); }
+    .positive { color: var(--success); font-weight: 600; }
+    .negative { color: var(--danger); font-weight: 600; }
+    a.provider-link { color: var(--primary); text-decoration: none; font-weight: 500; }
+    a.provider-link:hover { text-decoration: underline; }
+    .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 600; }
+    .rank-badge.gold { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .rank-badge.silver { background: linear-gradient(135deg, #94a3b8, #64748b); }
+    .rank-badge.bronze { background: linear-gradient(135deg, #cd7f32, #b45309); }
+    .action-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .action-btn { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font-size: 0.85rem; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+    .action-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .action-btn.danger { border-color: var(--danger); color: var(--danger); }
+    .action-btn.danger:hover { background: var(--danger); color: #fff; }
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <nav class="top-banner">
+    <span class="banner-brand">QLiBRD</span>
+    <div class="banner-nav">
+      <a href="/dashboard?account=simulation">仪表盘</a>
+      <div class="banner-divider"></div>
+      <span class="banner-section-label">Arena</span>
+      <a href="/api/arena/page" class="active">首页</a>
+      <a href="/api/arena/page/agent">Agent</a>
+      <a href="/api/arena/page/compare">Compare</a>
+      <a href="/api/arena/page/review">Review</a>
+      <a href="/api/arena/page/timeline">Timeline</a>
+      <a href="/api/arena/page/health">Health</a>
+      <a href="/api/arena/page/settings">Settings</a>
+    </div>
+  </nav>
+  <main>
+    <h1>AI Signal Arena</h1>
+    <div class="action-bar">
+      <span class="muted" id="actionDateLabel"></span>
+      <button class="action-btn danger" onclick="clearSignals()">清空当日信号</button>
+      <button class="action-btn" onclick="regenerateSignals()">重新获取信号</button>
+    </div>
+    <div class="grid" id="summary"></div>
+    <div class="curve-wrap">
+      <div class="section-header">
+        <h2 class="section-title">Agent 收益曲线</h2>
+        <div class="range-btns">
+          <button onclick="loadCurve(7)">7天</button>
+          <button onclick="loadCurve(30)" class="active">30天</button>
+          <button onclick="loadCurve(90)">90天</button>
+          <button onclick="loadCurve(0)">全部</button>
+        </div>
+      </div>
+      <div style="height:320px;position:relative"><canvas id="equityChart"></canvas></div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="section-header" style="padding:16px 20px 0">
+        <h2 class="section-title">今日排名</h2>
+        <span class="muted" id="totalAgents"></span>
+      </div>
+      <table class="rank-table" style="box-shadow:none;border:none;border-radius:0">
+        <thead><tr><th>排名</th><th>Agent</th><th>总资产</th><th>累计收益</th><th>日收益</th><th>信号数</th></tr></thead>
+        <tbody id="rankings"></tbody>
+      </table>
+    </div>
+  </main>
+  <script>
+    const COLORS = ['#d4a458','#ef4444','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
+    let chartInstance = null;
+    let actionInFlight = false;
+    function lastTradingDate() {
+      const d = new Date();
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    const today = lastTradingDate();
+    document.getElementById('actionDateLabel').textContent = `当前交易日: ${today}`;
+
+    function setActionButtonsDisabled(disabled) {
+      document.querySelectorAll('.action-btn').forEach(btn => {
+        btn.disabled = disabled;
+      });
+    }
+
+    async function clearSignals() {
+      if (actionInFlight) return;
+      if (!confirm(`确认清空 ${today} 的 Arena 信号吗？`)) return;
+      actionInFlight = true;
+      setActionButtonsDisabled(true);
+      try {
+        const resp = await fetch(`/api/arena/signals/${today}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || data.detail || '清空失败');
+        alert(data.message || '清空完成');
+        window.location.reload();
+      } catch (err) {
+        alert(err.message || '清空失败');
+      } finally {
+        actionInFlight = false;
+        setActionButtonsDisabled(false);
+      }
+    }
+
+    async function regenerateSignals() {
+      if (actionInFlight) return;
+      if (!confirm(`确认重新生成 ${today} 的 Arena 信号吗？`)) return;
+      actionInFlight = true;
+      setActionButtonsDisabled(true);
+      try {
+        const resp = await fetch(`/api/arena/signals/regenerate/${today}`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || data.detail || '重新生成失败');
+        alert(data.message || '重新生成完成');
+        window.location.reload();
+      } catch (err) {
+        alert(err.message || '重新生成失败');
+      } finally {
+        actionInFlight = false;
+        setActionButtonsDisabled(false);
+      }
+    }
+
+    fetch(`/api/arena/overview?trade_date=${today}`)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('summary').innerHTML = `
+          <div class="card"><div class="card-label">交易日</div><div class="card-value">${data.trade_date}</div></div>
+          <div class="card"><div class="card-label">Agent 数量</div><div class="card-value">${data.signals.provider_count}</div></div>
+          <div class="card"><div class="card-label">总信号数</div><div class="card-value">${data.signals.total_signal_count}</div></div>
+          <div class="card"><div class="card-label">共识股票</div><div class="card-value">${data.consensus.common_all.length}</div></div>
+        `;
+        document.getElementById('totalAgents').textContent = `${data.rankings.length} 个 Agent`;
+        const tbody = document.getElementById('rankings');
+        tbody.innerHTML = data.rankings.map((item) => {
+          const retClass = (item.cumulative_return_pct || 0) >= 0 ? 'positive' : 'negative';
+          const dailyClass = (item.daily_return_pct || 0) >= 0 ? 'positive' : 'negative';
+          const sigCount = (data.signals.providers || []).find(p => p.provider === item.provider);
+          let badgeClass = item.rank === 1 ? 'gold' : item.rank === 2 ? 'silver' : item.rank === 3 ? 'bronze' : '';
+          return `<tr>
+            <td><span class="rank-badge ${badgeClass}">${item.rank}</span></td>
+            <td><a class="provider-link" href="/api/arena/page/agent?provider=${item.provider}">${item.provider}</a></td>
+            <td>${(item.total_asset || 0).toLocaleString('zh-CN', {minimumFractionDigits: 0})}</td>
+            <td class="${retClass}">${(item.cumulative_return_pct || 0).toFixed(2)}%</td>
+            <td class="${dailyClass}">${(item.daily_return_pct || 0).toFixed(2)}%</td>
+            <td>${sigCount ? sigCount.signal_count : '-'}</td>
+          </tr>`;
+        }).join('') || '<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">暂无数据</td></tr>';
+      });
+
+    function loadCurve(days) {
+      if (event) { document.querySelectorAll('.range-btns button').forEach(b => b.classList.remove('active')); event.target.classList.add('active'); }
+      fetch(`/api/arena/all-equity-curve?days=${days}`).then(r => r.json()).then(renderCurve);
+    }
+
+    function renderCurve(data) {
+      const allDates = new Set();
+      data.providers.forEach(p => p.curve.forEach(c => allDates.add(c.trade_date)));
+      const dates = [...allDates].sort();
+      if (dates.length === 0) return;
+
+      const datasets = data.providers.map((p, i) => {
+        const m = {}; p.curve.forEach(c => { m[c.trade_date] = c.total_asset; });
+        return { label: p.provider, data: dates.map(d => m[d] || null), borderColor: COLORS[i % COLORS.length], backgroundColor: 'transparent', fill: false, tension: 0.25, pointRadius: dates.length <= 30 ? 3 : 0, pointHoverRadius: 5, borderWidth: 2 };
+      });
+      if (chartInstance) chartInstance.destroy();
+
+      // 只有一个数据点时显示提示
+      const canvas = document.getElementById('equityChart');
+      if (dates.length <= 1) {
+        canvas.parentElement.insertAdjacentHTML('beforeend', '<div id="curveHint" style="text-align:center;color:var(--text-muted);font-size:0.85rem;margin-top:8px">仅有 1 个交易日数据，曲线将在更多交易日后展示</div>');
+      } else {
+        const hint = document.getElementById('curveHint');
+        if (hint) hint.remove();
+      }
+
+      // 稀疏/等值数据时固定 Y 轴范围，防止图表比例异常
+      const allValues = datasets.flatMap(ds => ds.data).filter(v => v != null);
+      const yMin = Math.min(...allValues);
+      const yMax = Math.max(...allValues);
+      const yRange = yMax - yMin;
+      const yPadding = yRange === 0 ? Math.max(Math.abs(yMin), 10000) * 0.05 : yRange * 0.1;
+      const yScaleConfig = dates.length <= 2 || yRange === 0
+        ? { min: Math.floor((yMin - yPadding) / 10000) * 10000, max: Math.ceil((yMax + yPadding) / 10000) * 10000 }
+        : {};
+
+      chartInstance = new Chart(canvas, {
+        type: 'line', data: { labels: dates, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 20, usePointStyle: true } }, tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', padding: 12, callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.raw / 10000).toFixed(1)}万` } } },
+          scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#a3afb8' } }, y: { beginAtZero: false, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { callback: v => (v / 10000).toFixed(0) + '万', color: '#a3afb8' }, ...yScaleConfig } },
+        },
+      });
+    }
+    loadCurve(30);
+  </script>
+</body>
+</html>
