@@ -115,13 +115,47 @@ def _batch_get_prev_close_from_mongo(
 
 def _batch_get_prev_close_from_xtdata(stock_codes: list[str]) -> dict[str, float]:
     """Read previous closes from xtdata when Mongo data is missing."""
-    del stock_codes
-    return {}
+    if not stock_codes:
+        return {}
+    try:
+        _ensure_qmt_path("simulation")
+        from xtquant import xtdata
+
+        result: dict[str, float] = {}
+        for code in stock_codes:
+            try:
+                tick = xtdata.get_full_tick([code])
+                if tick and code in tick:
+                    data = tick[code]
+                    prev = data.get("lastClose", data.get("preClose", 0))
+                    if prev and prev > 0:
+                        result[code] = float(prev)
+            except Exception:
+                continue
+        if result:
+            logger.debug(f"xtdata 昨收价获取成功: {len(result)}/{len(stock_codes)}")
+        return result
+    except Exception as exc:
+        logger.warning(f"xtdata 批量获取昨收价失败: {exc}")
+        return {}
 
 
 def _get_prev_close_from_xtdata(stock_code: str, trade_date: date | None = None) -> float:
     """Read previous close from xtdata when Mongo data is missing."""
-    del stock_code, trade_date
+    del trade_date
+    try:
+        _ensure_qmt_path("simulation")
+        from xtquant import xtdata
+
+        tick = xtdata.get_full_tick([stock_code])
+        if tick and stock_code in tick:
+            data = tick[stock_code]
+            for key in ("lastClose", "preClose"):
+                val = data.get(key)
+                if val and val > 0:
+                    return float(val)
+    except Exception as exc:
+        logger.warning(f"xtdata 获取昨收价失败: {stock_code} error={exc}")
     return 0.0
 
 
@@ -554,11 +588,16 @@ def closing_auction_sell(engine: Any, trade_date: date) -> int:
             logger.info(f"涨停不卖: {stock_code}")
             continue
         if prev_close <= 0:
-            logger.warning(
-                f"收盘竞价卖出跳过 {stock_code}: 无法获取昨收价 "
-                f"(latest={latest_price:.2f})"
-            )
-            continue
+            if latest_price > 0:
+                prev_close = latest_price
+                logger.warning(
+                    f"收盘竞价卖出使用最新价替代昨收: {stock_code} price={latest_price:.2f}"
+                )
+            else:
+                logger.warning(
+                    f"收盘竞价卖出跳过 {stock_code}: 无法获取昨收价和最新价"
+                )
+                continue
         limit_down = calc_limit_down_price(prev_close, stock_code)
         signal = TradeSignal(
             signal_id=f"sell-auction-{trade_date.isoformat()}-{stock_code}",
